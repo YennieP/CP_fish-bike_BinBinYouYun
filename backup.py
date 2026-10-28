@@ -7,6 +7,7 @@
   python backup.py avatars                   # 阶段二之二：下载头像（从断点继续）
   python backup.py render                    # 阶段三：生成 HTML
   python backup.py share                     # 生成分享版并打包（完整包 + 更新包）
+  python backup.py epub --volumes 1          # 手机版：每 500 楼一本 EPUB
   python backup.py status                    # 查看进度
 """
 from __future__ import annotations
@@ -63,6 +64,9 @@ def main():
     sh = sub.add_parser("share", help="生成分享版（GIF 转视频、图片压缩、隐去用户 ID）并打包")
     sh.add_argument("--no-zip", action="store_true", help="只生成文件夹，不打包、不记录版本")
     sh.add_argument("--dist", default="dist", help="输出目录（默认 dist）")
+    ep = sub.add_parser("epub", help="生成手机版 EPUB（每 500 楼一册，动图用缩小的 GIF）")
+    ep.add_argument("--volumes", type=int, nargs="+", help="只生成这几册（从 1 开始），默认全部")
+    ep.add_argument("--dist", default="dist/epub", help="输出目录（默认 dist/epub）")
 
     args = p.parse_args()
     store = TopicStore(args.data_dir, args.topic)
@@ -85,6 +89,9 @@ def main():
         elif args.cmd == "share":
             from douban_backup import share
             share.build(store, args.dist, make_zip=not args.no_zip)
+        elif args.cmd == "epub":
+            from douban_backup import epub
+            epub.build(store, args.dist, args.volumes)
         elif args.cmd == "progress":
             from douban_backup.progress import watch
             watch(store)
