@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import html
+import json
 import math
 import os
 import re
@@ -63,7 +64,7 @@ JS = """
 <script>
 function jump(e){e.preventDefault();var n=parseInt(document.getElementById('jf').value,10);if(isNaN(n)||n<0)return false;
 var per=%d,k=n===0?0:Math.floor((n-1)/per),lo=k*per+1,hi=(k+1)*per;
-var pad=function(x){return String(x).padStart(5,'0')};location.href=pad(lo)+'-'+pad(hi)+'.html#f'+n;return false}
+var pad=function(x){return String(x).padStart(5,'0')};location.href=(window.PFX||'')+pad(lo)+'-'+pad(hi)+'.html#f'+n;return false}
 // 上方图片陆续加载会把目标楼层挤下去：加载期间持续把锚点拉回视野
 (function(){var h=location.hash;if(!h)return;var t0=Date.now();function fix(){var el=document.getElementById(h.slice(1));if(el)el.scrollIntoView();}
 var iv=setInterval(function(){fix();if(Date.now()-t0>3000)clearInterval(iv)},300);
@@ -109,7 +110,10 @@ def archive_media(store: TopicStore):
 
 class Renderer:
     def __init__(self, store: TopicStore, out_dir: str | None = None, media=None,
-                 media_prefix: str = "../images/", avatar_prefix: str = "../avatars/", share: bool = False):
+                 media_prefix: str = "../images/", avatar_prefix: str = "../avatars/", share: bool = False,
+                 entry: str = "index.html", pages_dir: str = ""):
+        """entry 是目录页文件名；pages_dir 非空时，分卷放进这个子文件夹，目录页留在最外层
+        （分享版用它让朋友一打开文件夹就看到入口）。media_prefix 是相对分卷所在位置的路径。"""
         self.store = store
         self.out_dir = out_dir or store.html_dir
         self.media = archive_media(store) if media is None else media
@@ -117,6 +121,7 @@ class Renderer:
         self.avatars = avatar_files(store)  # 用户ID -> 头像文件名（按内容哈希命名，不含 ID）
         self.avatar_prefix = avatar_prefix
         self.share = share
+        self.entry, self.pages_dir = entry, pages_dir
         self.topic = store.read_json(store.topic_path) or {}
         self.replies = sorted(store.replies(), key=lambda r: int(r["id"]))
         self.floor_of = {r["id"]: i for i, r in enumerate(self.replies, 1)}
@@ -222,15 +227,18 @@ class Renderer:
             f'<div class="c">{body}</div></div></article>'
         )
 
-    def page(self, title, inner):
+    def page(self, title, inner, pfx=""):
+        # pfx：从这一页到分卷所在文件夹的相对路径，给楼层跳转用
+        pfx_js = f"<script>var PFX={json.dumps(pfx)}</script>" if pfx else ""
         return (
             f'<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<title>{esc(title)}</title><style>{CSS}</style>{JS}</head><body>{inner}</body></html>'
+            f'<title>{esc(title)}</title><style>{CSS}</style>{pfx_js}{JS}</head><body>{inner}</body></html>'
         )
 
-    def nav(self, prev_f=None, next_f=None):
-        links = ['<a href="index.html">目录</a>']
+    def nav(self, prev_f=None, next_f=None, at_entry=False):
+        home = self.entry if at_entry or not self.pages_dir else f"../{self.entry}"
+        links = [f'<a href="{home}">目录</a>']
         if prev_f:
             links.append(f'<a href="{prev_f}">‹ 上一份</a>')
         if next_f:
@@ -240,7 +248,9 @@ class Renderer:
 
     def run(self, log=print):
         out = self.out_dir
-        os.makedirs(out, exist_ok=True)
+        pages_out = os.path.join(out, self.pages_dir) if self.pages_dir else out
+        os.makedirs(pages_out, exist_ok=True)
+        sub = f"{self.pages_dir}/" if self.pages_dir else ""
         n = len(self.replies)
         chunks = max(1, math.ceil(n / FLOORS_PER_FILE))
         files = [file_for_floor(k * FLOORS_PER_FILE + 1) for k in range(chunks)]
@@ -255,26 +265,26 @@ class Renderer:
             next_f = files[k + 1] if k + 1 < chunks else None
             pager = '<div class="pager">' + (f'<a href="{prev_f}">‹ 上一份</a>' if prev_f else "<span></span>") + (f'<a href="{next_f}">下一份 ›</a>' if next_f else "<span></span>") + "</div>"
             inner = self.nav(prev_f, next_f) + f"<main><h1>{esc(title)}</h1><p class='meta'>第 {lo}–{hi} 楼</p>" + "".join(body) + pager + "</main>"
-            with open(os.path.join(out, fname), "w", encoding="utf-8") as f:
+            with open(os.path.join(pages_out, fname), "w", encoding="utf-8") as f:
                 f.write(self.page(f"{title} · {lo}-{hi} 楼", inner))
             span = f"{part[0]['pubtime']} ~ {part[-1]['pubtime']}" if part else ""
-            listing.append(f'<li><a href="{fname}">第 {lo}–{hi} 楼</a> <span class="meta">{esc(span)}</span></li>')
+            listing.append(f'<li><a href="{sub}{fname}">第 {lo}–{hi} 楼</a> <span class="meta">{esc(span)}</span></li>')
 
         last_time = self.replies[-1]["pubtime"] if self.replies else "-"
         if self.share:
             intro = (f"<div class='note'>这是本楼的离线纪念备份，收录到 {esc(last_time)}，共 {n} 楼（不含主楼）。"
                      f"不需要联网，动图会在滚动到时自动播放。<br>"
                      f"昵称后面的“·N号”是本备份里给每位发帖人编的序号，用来区分同名用户，和豆瓣账号无关。<br>"
-                     f"收到更新包时，把它解压到同一位置、覆盖原文件即可。</div>")
+                     f"点下面的分卷进入；也可以在右上角输入楼层号直接跳转。更新方法见同一文件夹里的“使用说明.txt”。</div>")
         else:
             total_pages = self.store.state().get("total_pages", "?")
             summary = f"共 {n} 条回复（不含主楼），收录到 {last_time}。原帖共 {total_pages} 页。"
             intro = (f"<p class='meta'>{esc(summary)}</p>"
                      f"<p class='meta'>楼层号按回复 ID 顺序编号，可能和豆瓣 App 上的页码对不上。</p>")
-        inner = self.nav() + (f"<main><h1>{esc(title)}</h1>{intro}"
+        inner = self.nav(at_entry=True) + (f"<main><h1>{esc(title)}</h1>{intro}"
                               f"<p class='meta'>生成于 {time.strftime('%Y-%m-%d %H:%M')}</p>"
                               f"<ul class='files'>{''.join(listing)}</ul></main>")
-        with open(os.path.join(out, "index.html"), "w", encoding="utf-8") as f:
-            f.write(self.page(title, inner))
-        log(f"已生成 {chunks} 个分卷 + index.html → {out}")
-        return files + ["index.html"]
+        with open(os.path.join(out, self.entry), "w", encoding="utf-8") as f:
+            f.write(self.page(title, inner, pfx=sub))
+        log(f"已生成 {chunks} 个分卷 + {self.entry} → {out}")
+        return [sub + f for f in files] + [self.entry]

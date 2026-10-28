@@ -32,7 +32,7 @@ GUIDE = """\
 一、在电脑上看
 --------------
 下载：电脑版/ 里的完整包 {full_name}（{full_size}）
-打开：解压后，双击 {folder} 文件夹里的 index.html，用浏览器打开。
+打开：解压后，打开 {folder} 文件夹，双击里面的“点我打开.html”，用浏览器打开。
       每页顶部可以输入楼层号直接跳转；动图会在滚动到时自动播放。
 {update_note}
 
@@ -150,7 +150,7 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
         prev = re.search(r"-update-(\d{8}-\d{4})-to-", u).group(1)
         update_note = (f"\n更新：装过上一版（{prev}）的 Windows 用户，可以只下载 电脑版/ 里的更新包\n"
                        f"      {u}（{mb(os.path.getsize(os.path.join(dist_dir, u)))}），只含有变化的文件。\n"
-                       "      详细步骤见电脑版文件夹里的 README.txt。\n"
+                       "      详细步骤见电脑版文件夹里的“使用说明.txt”。\n"
                        "      Mac 用户、或者漏过版本的人，请重新下载完整包。\n")
         # 按上一版的楼数算出这次变了哪几册（和 update 重新生成分册的规则一致）
         prev_floors = (store.read_json(os.path.join(store.root, "releases", f"{prev}.json")) or {}).get("floors")

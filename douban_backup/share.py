@@ -21,6 +21,10 @@ from .crawl_images import done_map
 from .render import Renderer
 from .store import TopicStore
 
+ENTRY = "点我打开.html"   # 分享包最外层只放入口、说明和 内容/，朋友一打开就知道点哪个
+GUIDE_TXT = "使用说明.txt"
+PAGES_DIR = "内容"
+
 MAX_SIDE = 1280
 JPEG_QUALITY = 80
 
@@ -37,8 +41,13 @@ README = """\
 
 一、怎么打开
 ------------
-双击这个文件夹里的 index.html，会用浏览器（Chrome / Edge / Safari）打开目录页。
+双击这个文件夹里的“点我打开.html”，会用浏览器（Chrome / Edge / Safari）打开目录页。
 不需要联网，也不需要安装任何东西。
+
+  这个文件夹里只有三样东西：
+    点我打开.html   入口，从这里开始看
+    使用说明.txt    就是这份说明
+    内容/           全部楼层和图片都在这里，不用管它
 
   · 每 500 楼一个分卷，在目录页里点进去。
   · 想直接跳到某一楼：在页面顶部的“跳到楼层”框里输入楼层号（例如 1234），点“跳转”。
@@ -73,7 +82,7 @@ README = """\
     1. 右键更新包 →“全部解压缩”，目标文件夹选“下载”
        （选它的上一层，不要选 {folder} 里面，因为更新包里已经自带了 {folder} 这一层）；
     2. 问是否替换文件时，选“替换目标中的文件”；
-    3. 再打开这份 README.txt，最上面的版本号变成新的，就说明更新成功了。
+    3. 再打开这份“使用说明.txt”，最上面的版本号变成新的，就说明更新成功了。
 
   Mac 用户请用办法 1：Mac 双击解压不会覆盖旧文件，只会在旁边多出一个“{folder} 2”。
   （会用“终端”的话，也可以在上一层文件夹里运行：ditto -x -k 更新包文件名.zip . ）
@@ -236,11 +245,16 @@ def build(store: TopicStore, dist_dir: str = "dist", make_zip: bool = True, log=
     version = time.strftime("%Y%m%d-%H%M")
     top = f"douban-{store.topic_id}"
     pkg = adopt_dir(dist_dir, top, version, log)
-    pkg_media = os.path.join(pkg, "media")
+    pages = os.path.join(pkg, PAGES_DIR)
+    pkg_media = os.path.join(pages, "media")
+    os.makedirs(pages, exist_ok=True)
+    if os.path.isdir(os.path.join(pkg, "media")) and not os.path.exists(pkg_media):
+        os.rename(os.path.join(pkg, "media"), pkg_media)  # 旧版结构：素材挪进 内容/ 接着用，不用重新复制
     os.makedirs(pkg_media, exist_ok=True)
-    for f in os.listdir(pkg):  # 分卷会重新生成
-        if f.endswith(".html"):
-            os.remove(os.path.join(pkg, f))
+    for d in (pkg, pages):  # 分卷、入口和说明都会重新生成；顺带清掉旧版结构留在最外层的文件
+        for f in os.listdir(d):
+            if f.endswith((".html", ".txt")):
+                os.remove(os.path.join(d, f))
     wanted = {f for e in media.values() for f in e.values()}
     for f in wanted:
         dst = os.path.join(pkg_media, f)
@@ -263,11 +277,11 @@ def build(store: TopicStore, dist_dir: str = "dist", make_zip: bool = True, log=
             os.remove(os.path.join(pkg_av, f))
 
     r = Renderer(store, out_dir=pkg, media=media, media_prefix="media/",
-                 avatar_prefix="media/avatars/", share=True)
+                 avatar_prefix="media/avatars/", share=True, entry=ENTRY, pages_dir=PAGES_DIR)
     r.run(log)
 
     last_time = r.replies[-1]["pubtime"] if r.replies else "-"
-    with open(os.path.join(pkg, "README.txt"), "w", encoding="utf-8") as f:
+    with open(os.path.join(pkg, GUIDE_TXT), "w", encoding="utf-8") as f:
         f.write(README.format(title=r.topic.get("title", ""), last_time=last_time,
                               floors=len(r.replies), version=version, folder=top))
 
@@ -285,7 +299,13 @@ def build(store: TopicStore, dist_dir: str = "dist", make_zip: bool = True, log=
     write_zip(os.path.join(dist_dir, f"douban-{store.topic_id}-full-{version}.zip"), pkg, cur.keys(), log, top)
     if prev:
         changed = [p for p, h in cur.items() if prev.get(p) != h]
-        if changed:
+        removed = [p for p in prev if p not in cur]
+        if removed:
+            # 更新包只能新增、覆盖文件，删不掉旧文件；有文件被删或改名时（例如调整了文件夹结构），
+            # 朋友装更新包后会留下旧文件，所以这次不生成更新包，请大家重新下载完整包
+            log(f"  有 {len(removed)} 个文件被删除或改名（例如 {removed[0]}），更新包处理不了，这次不生成更新包；"
+                "请大家重新下载完整包")
+        elif changed:
             since = (store.read_json(latest_path, {}) or {}).get("version", "?")
             write_zip(os.path.join(dist_dir, f"douban-{store.topic_id}-update-{since}-to-{version}.zip"),
                       pkg, changed, log, top)
