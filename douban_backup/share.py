@@ -176,6 +176,17 @@ def adopt_dir(dist_dir: str, prefix: str, version: str, log=print) -> str:
     return target
 
 
+def prune_zips(dist_dir: str, topic_id: str, version: str, log=print):
+    """dist 里只留本版本的完整包和“上一版 → 本版”的更新包，更早的删掉。
+    生成更新包靠的是 data/<帖子>/releases/ 里的文件清单，不需要旧 zip。"""
+    keep = {f"douban-{topic_id}-full-{version}.zip"}
+    keep |= {f for f in os.listdir(dist_dir) if f.startswith(f"douban-{topic_id}-update-") and f.endswith(f"-to-{version}.zip")}
+    for f in sorted(os.listdir(dist_dir)):
+        if f.endswith(".zip") and f.startswith((f"douban-{topic_id}-full-", f"douban-{topic_id}-update-")) and f not in keep:
+            os.remove(os.path.join(dist_dir, f))
+            log(f"  删除旧压缩包 {f}")
+
+
 def write_zip(zip_path: str, pkg: str, rel_paths, log, top: str):
     """top 是朋友解压后看到的文件夹名，固定不带版本，更新包才能覆盖到同一个文件夹里。"""
     tmp = zip_path + ".tmp"
@@ -253,5 +264,6 @@ def build(store: TopicStore, dist_dir: str = "dist", make_zip: bool = True, log=
     release = {"version": version, "floors": len(r.replies), "last_time": last_time, "files": cur}
     store.write_json(os.path.join(releases, f"{version}.json"), release)
     store.write_json(latest_path, release)
+    prune_zips(dist_dir, store.topic_id, version, log)  # 新版本记录好之后再删旧包
     log(f"版本 {version}，收录到 {last_time}，共 {len(r.replies)} 楼")
     return pkg
