@@ -1,0 +1,10 @@
+# 抓取数据（含原始页面、图片），体积大，不进 Git
+data/
+# Cookie 绝不进 Git（默认放在 ~/.config/douban-backup/cookie.txt）
+cookie.txt
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+# 分享包输出
+dist/
