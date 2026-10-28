@@ -118,8 +118,9 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
     sizes = [os.path.getsize(p) for p in parts]
     update_note = ""
     if update_zips:
-        update_note = ("  已经装过旧版本的话，只下载 电脑版/ 里文件名带 update 的更新包，"
-                       "解压到原文件夹所在的位置、选择覆盖即可。\n")
+        update_note = ("  已经装过旧版本的 Windows 用户，只下载 电脑版/ 里文件名带 update 的更新包，"
+                       "解压到原文件夹所在的位置、选择替换即可（详见文件夹里的 README.txt）。\n"
+                       "  Mac 双击解压不会覆盖旧文件，建议直接重新下载完整包。\n")
     with open(os.path.join(out, "00-先看我-下载说明.txt"), "w", encoding="utf-8") as f:
         f.write(GUIDE.format(title=title, version=version, last_time=release["last_time"], floors=floors,
                              full_size=mb(os.path.getsize(full_zip)), update_note=update_note,

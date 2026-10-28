@@ -31,15 +31,23 @@ README = """\
 打开方法：双击本文件夹里的 index.html，用浏览器（Chrome / Edge / Safari）打开即可。
 不需要联网，也不需要安装任何东西。
 
-- 收录到 {last_time}，共 {floors} 楼（不含主楼）。
+- 收录到 {last_time}（北京时间），共 {floors} 楼（不含主楼）。
 - 每 500 楼一个分卷；每页顶部可以输入楼层号直接跳转。
 - 动图已转成体积更小的视频，滚动到时会自动循环播放，效果和动图一样。
 - 昵称后面的“·N号”是本备份给每位发帖人编的序号，用来区分同名用户，和豆瓣账号无关。
+- 标着“原帖已删除”的回复，在豆瓣上已经被删了，这里保留了原文。
+- 这是电脑版。手机上看请下载手机版 EPUB，用 Apple Books 等阅读器打开。
 
-更新：收到“更新包”（文件名带 update）时，把它解压到和本文件夹相同的位置，
-选择“覆盖 / 替换”即可。不需要重新下载完整包。
+更新：收到“更新包”（文件名带 update）时——
+  Windows：右键更新包 →“全部解压缩”，目标选 {folder} 这个文件夹所在的位置
+    （也就是它的上一层，不是这个文件夹里面）；问是否替换时选“替换目标中的文件”。
+    更新包里自带 {folder} 这一层，解压后会直接覆盖进来。
+  Mac：双击解压不会覆盖，只会另外生成一个“{folder} 2”，所以最省事的是直接重新下载完整包。
+    会用“终端”的话，也可以在 {folder} 的上一层运行：ditto -x -k 更新包文件名.zip .
+  更新包要按顺序一个接一个地装，每个只包含相对上一版的变化。
+  中间漏装了，或者不确定自己装到了哪一版，直接重新下载完整包最省事。
 
-版本：{version}
+版本：{version}（每装一次更新包，这里的版本号会跟着变）
 """
 
 
@@ -216,7 +224,7 @@ def build(store: TopicStore, dist_dir: str = "dist", make_zip: bool = True, log=
     last_time = r.replies[-1]["pubtime"] if r.replies else "-"
     with open(os.path.join(pkg, "README.txt"), "w", encoding="utf-8") as f:
         f.write(README.format(title=r.topic.get("title", ""), last_time=last_time,
-                              floors=len(r.replies), version=version))
+                              floors=len(r.replies), version=version, folder=top))
 
     if not make_zip:
         log(f"分享包文件夹：{pkg}")
