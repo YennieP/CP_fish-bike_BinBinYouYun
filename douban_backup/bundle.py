@@ -25,14 +25,16 @@ GUIDE = """\
 
 按自己的设备挑一种下载就行，不用全下：
 
-【电脑】电脑版/ 里的 zip（{full_size}）
+【电脑】电脑版/ 里文件名带 full 的完整包（{full_size}）
   下载后解压，双击文件夹里的 index.html，用浏览器打开。
   动图会在滚动到时自动播放；每页顶部可以输入楼层号直接跳转。
 {update_note}
 【手机】先把文件下载到手机，再用“其他应用打开”，选一个电子书阅读器。
   已在 iPhone 的 Apple Books（图书）上试过；微信读书、多看、静读天下等也可以试试，效果可能不同。
   请先下载再打开，网盘里直接预览多半显示不全。
+  手机版没有更新包，有新内容时重新下载对应的 EPUB 文件。
   · 手机版-全本/（{book_size}）：整楼一个文件，引用的楼层都能点过去。翻页流畅，跨章节跳转会卡一下。
+    以后更新时要整本重新下载。
   · 手机版-分{n_parts}册/（每册 {part_range}）：文件小，跳转更快；引用到别册的楼层只显示楼层号。
     以后更新时，只有最后一册会变，前面几册不用重新下载。
     想一次下完全部分册，可以下载 手机版-分{n_parts}册-打包/ 里的 zip（{parts_zip_size}），解压后得到同样的 {n_parts} 个文件。
@@ -118,9 +120,9 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
     sizes = [os.path.getsize(p) for p in parts]
     update_note = ""
     if update_zips:
-        update_note = ("  已经装过旧版本的 Windows 用户，只下载 电脑版/ 里文件名带 update 的更新包，"
-                       "解压到原文件夹所在的位置、选择替换即可（详见文件夹里的 README.txt）。\n"
-                       "  Mac 双击解压不会覆盖旧文件，建议直接重新下载完整包。\n")
+        update_note = ("  电脑版更新包：电脑版/ 里文件名带 update 的 zip，只含有变化的文件，只对装过上一版电脑版的人有用。\n"
+                       "    Windows 解压到原文件夹所在的位置、选择替换即可（详见电脑版文件夹里的 README.txt）；\n"
+                       "    Mac 双击解压不会覆盖旧文件，建议直接重新下载完整包。\n")
     with open(os.path.join(out, "00-先看我-下载说明.txt"), "w", encoding="utf-8") as f:
         f.write(GUIDE.format(title=title, version=version, last_time=release["last_time"], floors=floors,
                              full_size=mb(os.path.getsize(full_zip)), update_note=update_note,
