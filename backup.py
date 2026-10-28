@@ -67,6 +67,8 @@ def main():
     ep = sub.add_parser("epub", help="生成手机版 EPUB（每 500 楼一册，动图用缩小的 GIF）")
     ep.add_argument("--volumes", type=int, nargs="+", help="只生成这几册（从 1 开始），默认全部")
     ep.add_argument("--dist", default="dist/epub", help="输出目录（默认 dist/epub）")
+    ep.add_argument("--full", action="store_true", help="整楼合成一本（文件很大，先在手机上试能否打开）")
+    ep.add_argument("--per-book", type=int, default=500, help="每册多少楼（500 的倍数，默认 500）")
 
     args = p.parse_args()
     store = TopicStore(args.data_dir, args.topic)
@@ -91,7 +93,7 @@ def main():
             share.build(store, args.dist, make_zip=not args.no_zip)
         elif args.cmd == "epub":
             from douban_backup import epub
-            epub.build(store, args.dist, args.volumes)
+            epub.build(store, args.dist, args.volumes, full=args.full, per_book=args.per_book)
         elif args.cmd == "progress":
             from douban_backup.progress import watch
             watch(store)

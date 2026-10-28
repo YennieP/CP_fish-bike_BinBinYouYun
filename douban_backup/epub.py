@@ -128,9 +128,8 @@ class EpubRenderer(Renderer):
             return f'<span class="meta">#{fl}（第 {self.volume_of(fl) + 1} 册）</span>'
         return f'<a href="{chapter_file(fl)}#f{fl}">#{fl}</a>'
 
-    @staticmethod
-    def volume_of(floor):
-        return 0 if floor == 0 else (floor - 1) // FLOORS_PER_FILE
+    def volume_of(self, floor):
+        return 0 if floor == 0 else (floor - 1) // self.per_book
 
     def render_reply(self, r, floor, current_file):
         s = super().render_reply(r, floor, current_file)
@@ -188,10 +187,12 @@ def make_cover(path: str, title: str, subtitle: str):
     im.save(path, "JPEG", quality=85)
 
 
-def build_volume(store: TopicStore, vol: int, dist_dir: str, log=print) -> str:
+def build_volume(store: TopicStore, vol: int, dist_dir: str, per_book: int = FLOORS_PER_FILE, log=print) -> str:
+    """生成第 vol 册（从 0 开始），每册 per_book 楼；per_book 不小于总楼数时就是全本。"""
     r0 = EpubRenderer(store, media={})
     n = len(r0.replies)
-    lo, hi = vol * FLOORS_PER_FILE + 1, min((vol + 1) * FLOORS_PER_FILE, n)
+    full = per_book >= n
+    lo, hi = vol * per_book + 1, min((vol + 1) * per_book, n)
     part = r0.replies[lo - 1:hi]
     topic = r0.topic if vol == 0 else None
 
@@ -205,9 +206,10 @@ def build_volume(store: TopicStore, vol: int, dist_dir: str, log=print) -> str:
     files = prepare_epub_media(store, pids, log)
 
     r = EpubRenderer(store, media={pid: {"img": name} for pid, (_, name) in files.items()})
-    r.volume = vol
+    r.volume, r.per_book = vol, per_book
     title = r.topic.get("title") or store.topic_id
-    book_title = f"{title}（第 {vol + 1} 册 · {lo}–{hi} 楼）"
+    part_name = f"全本 · {lo}–{hi} 楼" if full else f"第 {vol + 1} 册 · {lo}–{hi} 楼"
+    book_title = f"{title}（{part_name}）"
 
     items, spine, toc = [], [], []  # (id, href, media-type, props)
     chapters = []
@@ -218,7 +220,8 @@ def build_volume(store: TopicStore, vol: int, dist_dir: str, log=print) -> str:
         if k == 0:
             last_time = r.replies[-1]["pubtime"] if r.replies else "-"
             body += (f"<h1>{html.escape(book_title)}</h1>"
-                     f"<div class='note'>本楼的离线纪念备份，收录到 {html.escape(last_time)}，全楼共 {n} 楼，每 500 楼一册。"
+                     f"<div class='note'>本楼的离线纪念备份，收录到 {html.escape(last_time)}，全楼共 {n} 楼"
+                     + ("。" if full else f"，每 {per_book} 楼一册。") +
                      "昵称后面的“·N号”是本备份给每位发帖人编的序号，用来区分同名用户，和豆瓣账号无关。"
                      "点引用里的楼层号可以跳过去。</div>")
             if topic:
@@ -233,11 +236,13 @@ def build_volume(store: TopicStore, vol: int, dist_dir: str, log=print) -> str:
     used_avatars = set(re.findall(r'src="\.\./media/avatars/([^"]+)"', "".join(c for _, c in chapters)))
 
     os.makedirs(dist_dir, exist_ok=True)
-    out = os.path.join(dist_dir, f"douban-{store.topic_id}-{vol + 1:02d}（{lo}-{hi}楼）.epub")
+    tag = "全本" if full else f"{vol + 1:02d}（{lo}-{hi}楼）"
+    out = os.path.join(dist_dir, f"douban-{store.topic_id}-{tag}.epub")
     tmp = out + ".tmp"
-    cover_path = os.path.join(store.root, "epub_media", f"cover-{vol + 1:02d}.jpg")
-    make_cover(cover_path, title, f"第 {vol + 1} 册 · {lo}–{hi} 楼")
-    book_id = f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, f'douban-{store.topic_id}-vol{vol}')}"
+    cover_path = os.path.join(store.root, "epub_media", f"cover-{'full' if full else f'{vol + 1:02d}'}.jpg")
+    make_cover(cover_path, title, part_name)
+    key = "full" if full else f"vol{vol}-{per_book}"
+    book_id = f"urn:uuid:{uuid.uuid5(uuid.NAMESPACE_URL, f'douban-{store.topic_id}-{key}')}"
     modified = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
     with zipfile.ZipFile(tmp, "w") as z:
@@ -270,14 +275,32 @@ def build_volume(store: TopicStore, vol: int, dist_dir: str, log=print) -> str:
         for f in sorted(used_avatars):
             add(f"media/avatars/{f}", path=os.path.join(avatars_dir(store), f), mtype=mtypes[f.rsplit(".", 1)[-1]], deflate=False)
 
-        nav = "".join(f'<li><a href="{h[5:]}">{html.escape(t)}</a></li>' for t, h in toc)
+        # 章节多时目录分两层：每 500 楼一组，组内每 50 楼一章
+        per_group = FLOORS_PER_FILE // FLOORS_PER_CHAPTER
+        groups = [toc[i:i + per_group] for i in range(0, len(toc), per_group)] if len(toc) > per_group else [[t] for t in toc]
+
+        def group_label(g):
+            first, last = g[0][0], g[-1][0]
+            return first if len(g) == 1 else first.split("–")[0] + "–" + last.split("–")[1]
+
+        nav = "".join(
+            f'<li><a href="{g[0][1][5:]}">{html.escape(group_label(g))}</a>'
+            + ("<ol>" + "".join(f'<li><a href="{h[5:]}">{html.escape(t)}</a></li>' for t, h in g) + "</ol>" if len(g) > 1 else "")
+            + "</li>" for g in groups)
         add("text/nav.xhtml", '<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n'
             '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="zh-CN" xml:lang="zh-CN">'
             f'<head><meta charset="utf-8"/><title>目录</title></head><body><nav epub:type="toc" id="toc"><h1>目录</h1><ol>{nav}</ol></nav></body></html>',
             mtype="application/xhtml+xml", props="nav")
         # 老一些的阅读器（含不少国内阅读器）只认 EPUB2 的 toc.ncx
-        points = "".join(f'<navPoint id="n{i}" playOrder="{i + 1}"><navLabel><text>{html.escape(t)}</text></navLabel><content src="{h}"/></navPoint>'
-                         for i, (t, h) in enumerate(toc))
+        order = iter(range(1, 10 ** 6))
+
+        def point(t, h, inner=""):
+            k = next(order)
+            return (f'<navPoint id="n{k}" playOrder="{k}"><navLabel><text>{html.escape(t)}</text></navLabel>'
+                    f'<content src="{h}"/>{inner}</navPoint>')
+
+        points = "".join(point(group_label(g), g[0][1], "".join(point(t, h) for t, h in g) if len(g) > 1 else "")
+                         for g in groups)
         ncx_id = add("toc.ncx", '<?xml version="1.0" encoding="utf-8"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">'
                      f'<head><meta name="dtb:uid" content="{book_id}"/></head><docTitle><text>{html.escape(book_title)}</text></docTitle>'
                      f'<navMap>{points}</navMap></ncx>', mtype="application/x-dtbncx+xml")
@@ -299,9 +322,16 @@ def build_volume(store: TopicStore, vol: int, dist_dir: str, log=print) -> str:
     return out
 
 
-def build(store: TopicStore, dist_dir: str = "dist/epub", volumes=None, log=print):
+def build(store: TopicStore, dist_dir: str = "dist/epub", volumes=None, full=False,
+          per_book: int = FLOORS_PER_FILE, log=print):
+    """per_book 按楼数固定分册（须是 500 的倍数）：楼增高后只有最后一册变化，满了再新开一册。"""
     n = len(store.replies())
-    total = max(1, math.ceil(n / FLOORS_PER_FILE))
+    if full:
+        log(f"生成手机版 EPUB：全本 1 册，共 {n} 楼")
+        return [build_volume(store, 0, dist_dir, per_book=n, log=log)]
+    if per_book % FLOORS_PER_FILE:
+        raise SystemExit(f"--per-book 需要是 {FLOORS_PER_FILE} 的倍数")
+    total = max(1, math.ceil(n / per_book))
     vols = [v - 1 for v in volumes] if volumes else range(total)
-    log(f"生成手机版 EPUB：共 {total} 册，本次生成 {len(vols)} 册")
-    return [build_volume(store, v, dist_dir, log) for v in vols if 0 <= v < total]
+    log(f"生成手机版 EPUB：每册 {per_book} 楼，共 {total} 册，本次生成 {len(vols)} 册")
+    return [build_volume(store, v, dist_dir, per_book=per_book, log=log) for v in vols if 0 <= v < total]
