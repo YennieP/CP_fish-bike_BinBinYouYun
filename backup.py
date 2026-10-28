@@ -2,6 +2,7 @@
 """豆瓣小组长帖备份。
 
   python backup.py text   --max-pages 5      # 阶段一：抓文字（从断点继续）
+  python backup.py text   --refresh          # 全量复查：更新点赞、主楼，标记已删除的回复
   python backup.py images --max 200          # 阶段二：下载图片（从断点继续）
   python backup.py avatars                   # 阶段二之二：下载头像（从断点继续）
   python backup.py render                    # 阶段三：生成 HTML
@@ -45,8 +46,10 @@ def main():
     sub = p.add_subparsers(dest="cmd", required=True)
 
     t = sub.add_parser("text", help="抓文字，每页追加写 replies.jsonl")
-    t.add_argument("--max-pages", type=int, default=5, help="本次最多抓几页（默认 5）")
+    t.add_argument("--max-pages", type=int, help="本次最多抓几页（默认 5；--refresh 时默认不限）")
     t.add_argument("--start", type=int, help="不用断点，从指定 start 值开始（如 0、100、200）")
+    t.add_argument("--refresh", action="store_true",
+                   help="全量复查：从第 1 页翻到末页，更新点赞数和主楼，把没翻到的回复标记为已删除（可中断续查）")
 
     i = sub.add_parser("images", help="下载图片")
     i.add_argument("--max", type=int, help="本次最多下载几张")
@@ -66,7 +69,12 @@ def main():
 
     try:
         if args.cmd == "text":
-            crawl_text.run(Client(), store, args.max_pages, start=args.start)
+            if args.refresh:
+                if args.start is not None:
+                    p.error("--refresh 总是从第 1 页（或上次复查的断点）开始，不能和 --start 一起用")
+                crawl_text.refresh(Client(), store, args.max_pages or 10000)
+            else:
+                crawl_text.run(Client(), store, args.max_pages or 5, start=args.start)
         elif args.cmd == "images":
             crawl_images.run(Client(), store, args.max)
         elif args.cmd == "avatars":
@@ -88,6 +96,15 @@ def main():
                   f"{len(store.replies())} 条回复；图片 {len(done)}/{len(imgs)}；"
                   f"下次从 {st.get('cursor', '第 1 页')} 开始"
                   + ("（已到末页，下次抓增量）" if st.get("reached_end") else ""))
+            if st.get("refresh"):
+                print(f"全量复查 {st['refresh']['id']} 进行中：已查 {len(st['refresh']['pages'])} 页，"
+                      "再运行 text --refresh 会接着查")
+            elif st.get("last_refresh"):
+                lr = st["last_refresh"]
+                print(f"上次全量复查：{lr['finished_at']}，{lr['updated']} 条有变化，标记已删除 {lr['deleted']} 条")
+            deleted = sum(1 for r in store.replies() if r.get("deleted"))
+            if deleted:
+                print(f"备份里共有 {deleted} 条回复在原帖已被删除（保留原文）")
     except Blocked as e:
         blocked_exit(e)
     except requests.RequestException as e:

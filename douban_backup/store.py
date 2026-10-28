@@ -13,6 +13,7 @@ class TopicStore:
         self.images_dir = os.path.join(self.root, "images")
         self.html_dir = os.path.join(self.root, "html")
         self.replies_path = os.path.join(self.root, "replies.jsonl")
+        self.updates_path = os.path.join(self.root, "updates.jsonl")
         self.images_log = os.path.join(self.root, "images.jsonl")
         self.topic_path = os.path.join(self.root, "topic.json")
         self.state_path = os.path.join(self.root, "state.json")
@@ -63,10 +64,15 @@ class TopicStore:
 
     # ---- 便捷方法 ----
     def replies(self):
-        """按回复 ID 去重（保留最早抓到的一条）。"""
+        """按回复 ID 去重（保留最早抓到的一条），再按顺序叠加 updates.jsonl 里
+        全量复查记下的变化（点赞数、楼主赞过、是否已删除）。"""
         seen = {}
         for r in self.read_jsonl(self.replies_path):
             seen.setdefault(r["id"], r)
+        for u in self.read_jsonl(self.updates_path):
+            r = seen.get(u.get("id"))
+            if r is not None:
+                r.update({k: v for k, v in u.items() if k not in ("id", "at")})
         return list(seen.values())
 
     def state(self):

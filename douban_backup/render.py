@@ -43,6 +43,8 @@ article header .u{color:var(--fg);font-weight:600}
 .uid{color:var(--muted);font-weight:400}
 .op{background:var(--badge);color:var(--accent);border-radius:4px;padding:0 5px;font-size:12px}
 .likes{margin-left:auto}
+.del{background:#f6e3df;color:#a8452f;border-radius:4px;padding:0 5px;font-size:12px}
+@media (prefers-color-scheme:dark){.del{background:#3a2522;color:#e39a87}}
 .c p{margin:.4em 0;white-space:pre-wrap;word-break:break-word}
 .c img,.pic img,.pic video{max-width:100%;max-height:420px;width:auto;height:auto;border-radius:6px;display:block}
 .pic.sticker img,.pic.sticker video{max-width:200px;max-height:200px}
@@ -193,6 +195,8 @@ class Renderer:
         badges = ' <span class="op">楼主</span>' if r.get("is_op") else ""
         if r.get("op_liked"):
             badges += ' <span class="op">楼主赞过</span>'
+        if r.get("deleted"):
+            badges += ' <span class="del">原帖已删除</span>'
         return (
             f'<article id="f{floor}">{self.avatar(r.get("author_id"))}<div class="b"><a id="r{esc(r["id"])}"></a><header>'
             f'<a class="fl" href="#f{floor}">#{floor}</a>{self.user(r.get("author_name"), r.get("author_id"))}{badges}'
