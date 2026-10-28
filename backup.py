@@ -8,6 +8,7 @@
   python backup.py render                    # 阶段三：生成 HTML
   python backup.py share                     # 生成分享版并打包（完整包 + 更新包）
   python backup.py epub --volumes 1          # 手机版：每 500 楼一本 EPUB
+  python backup.py bundle                    # 整理上传网盘用的文件夹（电脑版 + 手机版 + 下载说明）
   python backup.py status                    # 查看进度
 """
 from __future__ import annotations
@@ -69,6 +70,7 @@ def main():
     ep.add_argument("--dist", default="dist/epub", help="输出目录（默认 dist/epub）")
     ep.add_argument("--full", action="store_true", help="整楼合成一本（文件很大，先在手机上试能否打开）")
     ep.add_argument("--per-book", type=int, default=500, help="每册多少楼（500 的倍数，默认 500）")
+    sub.add_parser("bundle", help="整理上传网盘用的文件夹（硬链接，不额外占空间）")
 
     args = p.parse_args()
     store = TopicStore(args.data_dir, args.topic)
@@ -94,6 +96,9 @@ def main():
         elif args.cmd == "epub":
             from douban_backup import epub
             epub.build(store, args.dist, args.volumes, full=args.full, per_book=args.per_book)
+        elif args.cmd == "bundle":
+            from douban_backup import bundle
+            bundle.build(store)
         elif args.cmd == "progress":
             from douban_backup.progress import watch
             watch(store)

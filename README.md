@@ -35,6 +35,7 @@ Cookie 不会被打印，也不在项目目录里，不会进 Git。
 .venv/bin/python backup.py share                 # 5. 生成分享版并打包（完整包 + 更新包）
 .venv/bin/python backup.py epub --full           # 6. 手机版：整楼一本 EPUB
 .venv/bin/python backup.py epub --per-book 2500  #    手机版：每 2500 楼一册（--volumes 5 只生成第 5 册）
+.venv/bin/python backup.py bundle                # 7. 整理上传网盘用的文件夹
 .venv/bin/python backup.py status                # 查看进度（一行）
 .venv/bin/python backup.py progress              # 实时进度条（只读，不发请求）
 ```
@@ -53,6 +54,9 @@ Cookie 不会被打印，也不在项目目录里，不会进 Git。
 .venv/bin/python backup.py avatars               # 3. 补新发帖人的头像
 .venv/bin/python backup.py render                # 4. 更新自己的存档版
 .venv/bin/python backup.py share                 # 5. 生成新的分享包 + 更新包
+.venv/bin/python backup.py epub --full           # 6. 重新生成手机版全本
+.venv/bin/python backup.py epub --per-book 2500 --volumes 5   #    只重新生成最后一册（满 2500 楼后会多出第 6 册）
+.venv/bin/python backup.py bundle                # 7. 整理上传文件夹
 .venv/bin/python backup.py status                # 确认结果
 ```
 
@@ -86,6 +90,26 @@ Cookie 不会被打印，也不在项目目录里，不会进 Git。
 - 更新包里带着 `douban-<帖子ID>/` 这一层文件夹，朋友要把它解压到这个文件夹**所在的位置**，选择覆盖。
 - 更新包是一个接一个的：每次生成的都要发，中间漏了一个，后面的就补不全。
 - 朋友漏装了、或者不确定装到哪一版了，直接重新下载完整包最省事。
+
+### 整理上传文件夹
+
+```bash
+.venv/bin/python backup.py bundle
+```
+
+把要上传网盘的文件整理到 `dist/upload/<帖子标题>-离线备份-<版本>/`，整个文件夹拖进网盘客户端即可：
+
+```
+00-先看我-下载说明.txt    给朋友的说明：电脑 / 手机各下哪个、怎么打开
+电脑版/                   完整包 zip；有更新包时一并放入
+手机版-全本/              全本 EPUB
+手机版-分N册/             分册 EPUB
+```
+
+- 文件是硬链接，不额外占用磁盘；删掉这个文件夹不影响 `dist/` 里的原文件。
+- 整理前会检查：分册要连续并收到最后一楼，各个文件不能比最新数据旧。不满足时会停下并提示先重新生成哪些文件，
+  避免把旧文件传上去。所以更新时要先跑完 `share` 和 `epub`，再运行 `bundle`。
+- 版本号跟分享版一致（最近一次 `share` 的时间）。
 
 ### Cookie 过期
 
