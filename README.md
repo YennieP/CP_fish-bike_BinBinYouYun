@@ -46,19 +46,28 @@ Cookie 不会被打印，也不在项目目录里，不会进 Git。
 
 ## 楼增高后怎么更新
 
-### 日常更新：只补新回复
+### 日常更新：一条命令
 
 ```bash
-.venv/bin/python backup.py text --max-pages 30   # 1. 补新回复
-.venv/bin/python backup.py images                # 2. 补新图片
-.venv/bin/python backup.py avatars               # 3. 补新发帖人的头像
-.venv/bin/python backup.py render                # 4. 更新自己的存档版
-.venv/bin/python backup.py share                 # 5. 生成新的分享包 + 更新包
-.venv/bin/python backup.py epub --full           # 6. 重新生成手机版全本
-.venv/bin/python backup.py epub --per-book 2500 --volumes 5   #    只重新生成最后一册（满 2500 楼后会多出第 6 册）
-.venv/bin/python backup.py bundle                # 7. 整理上传文件夹
-.venv/bin/python backup.py status                # 确认结果
+.venv/bin/python backup.py update
 ```
+
+按顺序自动完成下面 7 步，最后列出这次要告诉朋友下载哪些文件：
+
+1. `text`：从断点翻到末页，补新回复（不用再估 `--max-pages`）
+2. `images`：只下新图片
+3. `avatars`：只下新发帖人的头像
+4. `render`：存档版
+5. `share`：分享版完整包 + 更新包
+6. `epub`：手机版全本，以及需要重新生成的分册
+   （按上个版本的楼数算：平时只有最后一册；跨过 2500 楼的整数倍时，上一册补满、再新开一册）
+7. `bundle`：整理上传文件夹
+
+- 和上个版本相比没有新回复时，在第 4 步之前停下，不生成空版本。
+- 被风控拦下时立刻停止，已生成的成品不受影响；处理好之后重新运行 `update` 即可。
+- `update --refresh`：第 1 步改为全量复查（见下文），分册全部重新生成。
+- `update --offline`：不联网，只用已有数据重新生成成品。
+- 也可以照旧一步步运行上面这些命令，效果一样。
 
 - 抓到末页后，断点会停在末页。`text` 每次先重抓这一页拿到新回复，再顺着“后页”往后翻。
 - `text` 默认一次只抓 5 页，新增页数多时加大 `--max-pages`，或者多跑几次，直到看到“已到最后一页”。
@@ -107,6 +116,7 @@ Cookie 不会被打印，也不在项目目录里，不会进 Git。
 ```
 
 - 文件是硬链接，不额外占用磁盘；删掉这个文件夹不影响 `dist/` 里的原文件。
+- 只保留最新一版的上传文件夹，更早的会自动删掉（它们只是硬链接，留着会让被替换掉的旧版全本、旧分册继续占用磁盘；完整包和更新包的 zip 原件仍在 `dist/` 里）。
 - 整理前会检查：分册要连续并收到最后一楼；完整包、全本和最后一册不能比最新数据旧。不满足时会停下并提示先重新生成哪些文件，
   避免把旧文件传上去。所以更新时要先跑完 `share` 和 `epub`，再运行 `bundle`。
 - 前面几册不随新回复变化，所以不检查它们。跑过全量复查（`text --refresh`）后，旧楼层的点赞、删帖标记会变，

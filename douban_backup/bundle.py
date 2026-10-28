@@ -113,6 +113,13 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
                              book_size=mb(os.path.getsize(book)), n_parts=len(parts),
                              part_range=f"{mb(min(sizes))}～{mb(max(sizes))}"))
 
+    # 更早的上传文件夹只是硬链接，留着会把已被替换的旧版全本、旧分册一直占在磁盘上
+    for d in os.listdir(os.path.dirname(out)):
+        old = os.path.join(os.path.dirname(out), d)
+        if d != os.path.basename(out) and d.startswith(f"{safe}-离线备份-") and os.path.isdir(old):
+            shutil.rmtree(old)
+            log(f"删除旧的上传文件夹 {d}/（zip 原件仍在 dist/ 里）")
+
     total = 0
     log(f"上传文件夹：{out}")
     for root, _, files in sorted(os.walk(out)):

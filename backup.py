@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """豆瓣小组长帖备份。
 
+  python backup.py update                    # 一键增量更新：补数据 → 生成全部成品 → 整理上传文件夹
   python backup.py text   --max-pages 5      # 阶段一：抓文字（从断点继续）
   python backup.py text   --refresh          # 全量复查：更新点赞、主楼，标记已删除的回复
   python backup.py images --max 200          # 阶段二：下载图片（从断点继续）
@@ -71,6 +72,10 @@ def main():
     ep.add_argument("--full", action="store_true", help="整楼合成一本（文件很大，先在手机上试能否打开）")
     ep.add_argument("--per-book", type=int, default=500, help="每册多少楼（500 的倍数，默认 500）")
     sub.add_parser("bundle", help="整理上传网盘用的文件夹（硬链接，不额外占空间）")
+    up = sub.add_parser("update", help="一键增量更新：补新回复、图片、头像，生成存档版、分享版、手机版，整理上传文件夹")
+    up.add_argument("--refresh", action="store_true", help="用全量复查代替补新回复（更新点赞、主楼、删帖标记），分册全部重新生成")
+    up.add_argument("--offline", action="store_true", help="不联网，只用已有数据重新生成成品")
+    up.add_argument("--per-book", type=int, default=2500, help="手机版每册多少楼（默认 2500）")
 
     args = p.parse_args()
     store = TopicStore(args.data_dir, args.topic)
@@ -96,6 +101,9 @@ def main():
         elif args.cmd == "epub":
             from douban_backup import epub
             epub.build(store, args.dist, args.volumes, full=args.full, per_book=args.per_book)
+        elif args.cmd == "update":
+            from douban_backup import update
+            update.run(store, refresh=args.refresh, fetch=not args.offline, per_book=args.per_book)
         elif args.cmd == "bundle":
             from douban_backup import bundle
             bundle.build(store)
