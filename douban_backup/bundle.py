@@ -20,27 +20,53 @@ from . import epub
 from .store import TopicStore
 
 GUIDE = """\
-{title} · 离线备份（版本 {version}）
-收录到 {last_time}，共 {floors} 楼（不含主楼）。不需要联网，也不需要装任何软件。
+{title} · 离线备份
+================================================
 
-按自己的设备挑一种下载就行，不用全下：
+版本：{version}
+收录到 {last_time}（北京时间），共 {floors} 楼（不含主楼）。
 
-【电脑】电脑版/ 里文件名带 full 的完整包（{full_size}）
-  下载后解压，双击文件夹里的 index.html，用浏览器打开。
-  动图会在滚动到时自动播放；每页顶部可以输入楼层号直接跳转。
+按自己的设备挑一种下载就行，不用全下。看的时候都不需要联网，也不需要装软件。
+
+
+一、在电脑上看
+--------------
+下载：电脑版/ 里的完整包 {full_name}（{full_size}）
+打开：解压后，双击 {folder} 文件夹里的 index.html，用浏览器打开。
+      每页顶部可以输入楼层号直接跳转；动图会在滚动到时自动播放。
 {update_note}
-【手机】先把文件下载到手机，再用“其他应用打开”，选一个电子书阅读器。
-  已在 iPhone 的 Apple Books（图书）上试过；微信读书、多看、静读天下等也可以试试，效果可能不同。
-  请先下载再打开，网盘里直接预览多半显示不全。
-  手机版没有更新包，有新内容时重新下载对应的 EPUB 文件。
-  · 手机版-全本/（{book_size}）：整楼一个文件，引用的楼层都能点过去。翻页流畅，跨章节跳转会卡一下。
-    以后更新时要整本重新下载。
-  · 手机版-分{n_parts}册/（每册 {part_range}）：文件小，跳转更快；引用到别册的楼层只显示楼层号。
-    以后更新时，只有最后一册会变，前面几册不用重新下载。
-    想一次下完全部分册，可以下载 手机版-分{n_parts}册-打包/ 里的 zip（{parts_zip_size}），解压后得到同样的 {n_parts} 个文件。
 
-昵称后面的“·N号”是本备份给每位发帖人编的序号，用来区分同名用户，和豆瓣账号无关。
-备份内容的版权属于原发帖人，只在本楼内分享，请不要公开转载。
+二、在手机上看
+--------------
+手机版是 EPUB 电子书，有两种，挑一种：
+
+  全本：手机版-全本/ 里的 {book_name}（{book_size}）
+    · 整楼一个文件，引用里的楼层都能点过去。
+    · 翻页流畅，跳到很远的楼层时会卡一下。
+    · 以后每次更新，都要整本重新下载。
+
+  分册：手机版-分{n_parts}册/ 里的 {n_parts} 个文件（每 {per_book} 楼一册，每册 {part_range}）
+    · 文件小，跳转快；引用到别的册子的楼层只显示楼层号，点不过去。
+    · 以后更新时，只有最后一两册会变，前面的册子不用重新下载。{changed_note}
+    · 想一次下完全部分册：下载 手机版-分{n_parts}册-打包/ 里的 zip（{parts_zip_size}），
+      解压后就是这 {n_parts} 个 EPUB 文件。
+
+怎么打开（以 iPhone 为例）：
+  1. 在网盘 App 里选中 EPUB 文件，点“下载”，把它存到手机上。
+     不要直接点开预览，网盘里预览多半显示不全。
+  2. 下载完成后，点“用其他应用打开”（或“分享”），选“图书”（Apple Books）。
+  3. 之后在“图书”的书库里就能看到这本书。
+  （网盘 App 的按钮名称可能略有不同。）
+  已在 iPhone 的“图书”上试过。安卓手机或微信读书、多看、静读天下等阅读器也可以试试，效果可能不同。
+
+更新：手机版没有更新包。有新版本时，先在阅读器里删掉旧的那本，再下载新的 EPUB 导入。
+
+
+小提示
+------
+  · 昵称后面的“·N号”是本备份给每位发帖人编的序号，用来区分同名的人，和豆瓣账号无关。
+  · 标着“原帖已删除”的回复，在豆瓣上已经被删了，这里保留了原文。
+  · 备份内容的版权属于原发帖人，只在本楼内分享，请不要公开转载。
 """
 
 
@@ -118,15 +144,27 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
     place(pzip, part_dir + "-打包")
 
     sizes = [os.path.getsize(p) for p in parts]
-    update_note = ""
+    update_note = changed_note = ""
     if update_zips:
-        update_note = ("  电脑版更新包：电脑版/ 里文件名带 update 的 zip，只含有变化的文件，只对装过上一版电脑版的人有用。\n"
-                       "    Windows 解压到原文件夹所在的位置、选择替换即可（详见电脑版文件夹里的 README.txt）；\n"
-                       "    Mac 双击解压不会覆盖旧文件，建议直接重新下载完整包。\n")
+        u = update_zips[-1]
+        prev = re.search(r"-update-(\d{8}-\d{4})-to-", u).group(1)
+        update_note = (f"\n更新：装过上一版（{prev}）的 Windows 用户，可以只下载 电脑版/ 里的更新包\n"
+                       f"      {u}（{mb(os.path.getsize(os.path.join(dist_dir, u)))}），只含有变化的文件。\n"
+                       "      详细步骤见电脑版文件夹里的 README.txt。\n"
+                       "      Mac 用户、或者漏过版本的人，请重新下载完整包。\n")
+        # 按上一版的楼数算出这次变了哪几册（和 update 重新生成分册的规则一致）
+        prev_floors = (store.read_json(os.path.join(store.root, "releases", f"{prev}.json")) or {}).get("floors")
+        if prev_floors:
+            first = max(1, -(-prev_floors // per_book))
+            changed = [os.path.basename(p) for p in parts[first - 1:]]
+            if len(changed) < len(parts):
+                changed_note = "\n      这次（相比 " + prev + "）变化的是：" + "、".join(changed) + "。"
     with open(os.path.join(out, "00-先看我-下载说明.txt"), "w", encoding="utf-8") as f:
         f.write(GUIDE.format(title=title, version=version, last_time=release["last_time"], floors=floors,
+                             folder=f"douban-{tid}", full_name=os.path.basename(full_zip),
                              full_size=mb(os.path.getsize(full_zip)), update_note=update_note,
-                             book_size=mb(os.path.getsize(book)), n_parts=len(parts),
+                             book_name=os.path.basename(book), book_size=mb(os.path.getsize(book)),
+                             n_parts=len(parts), per_book=per_book, changed_note=changed_note,
                              part_range=f"{mb(min(sizes))}～{mb(max(sizes))}", parts_zip_size=mb(os.path.getsize(pzip))))
 
     # 更早的上传文件夹只是硬链接，留着会把已被替换的旧版全本、旧分册一直占在磁盘上
