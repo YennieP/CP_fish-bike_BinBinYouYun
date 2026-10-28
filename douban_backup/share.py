@@ -24,7 +24,7 @@ MAX_SIDE = 1280
 JPEG_QUALITY = 80
 
 README = """\
-《{title}》离线备份
+豆瓣帖子「{title}」离线备份
 ================================
 
 打开方法：双击本文件夹里的 index.html，用浏览器（Chrome / Edge / Safari）打开即可。
