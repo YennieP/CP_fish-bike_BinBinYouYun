@@ -5,7 +5,7 @@
   3. avatars     只下新头像
   4. render      存档版
   5. share       分享版完整包 + 更新包（和上一个版本比较）
-  6. epub        全本 + 需要重新生成的分册（按上个版本的楼数算出来）
+  6. epub        全本 + 需要重新生成的分册（按上个版本的楼数算出来），并重新打分册 zip
   7. bundle      上传文件夹
 
 和上个版本相比没有变化时，在第 4 步之前停下，不产生空版本（空版本会让更新包链条多出一环）。
@@ -100,4 +100,5 @@ def run(store: TopicStore, refresh: bool = False, fetch: bool = True, per_book: 
         log(f"  · 手机版分册：全部 {len(parts)} 册都要重新下载")
     else:
         log(f"  · 手机版分册：只需重新下载 {'、'.join(changed_parts)}")
+    log(f"    （新朋友或想一次下完的，下载分册打包 {os.path.basename(epub.parts_zip(store, epub_dir, per_book))}）")
     return out

@@ -7,12 +7,14 @@
     电脑版/          douban-<帖子>-full-<版本>.zip（有更新包时一并放入）
     手机版-全本/      douban-<帖子>-全本.epub          （来自 dist/epub-<版本>/全本/）
     手机版-分N册/     douban-<帖子>-01（1-2500楼）.epub ……（来自 dist/epub-<版本>/分册-每N楼/）
+    手机版-分N册-打包/ douban-<帖子>-手机版-分册-每N楼.zip（全部分册打成一个包，方便一次下载）
 """
 from __future__ import annotations
 
 import os
 import re
 import shutil
+import zipfile
 
 from . import epub
 from .store import TopicStore
@@ -33,6 +35,7 @@ GUIDE = """\
   · 手机版-全本/（{book_size}）：整楼一个文件，引用的楼层都能点过去。翻页流畅，跨章节跳转会卡一下。
   · 手机版-分{n_parts}册/（每册 {part_range}）：文件小，跳转更快；引用到别册的楼层只显示楼层号。
     以后更新时，只有最后一册会变，前面几册不用重新下载。
+    想一次下完全部分册，可以下载 手机版-分{n_parts}册-打包/ 里的 zip（{parts_zip_size}），解压后得到同样的 {n_parts} 个文件。
 
 昵称后面的“·N号”是本备份给每位发帖人编的序号，用来区分同名用户，和豆瓣账号无关。
 备份内容的版权属于原发帖人，只在本楼内分享，请不要公开转载。
@@ -72,7 +75,11 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
     parts = sorted(os.path.join(src_dir, f) for f in (os.listdir(src_dir) if src_dir else [])
                    if re.fullmatch(rf"douban-{tid}-\d\d（\d+-\d+楼）\.epub", f))
 
+    per_book = int(re.search(r"\d+", part_dirs[0]).group()) if part_dirs else 0
+    pzip = epub.parts_zip(store, epub_dir, per_book) if part_dirs else ""
     missing = [p for p in (full_zip, book) if not os.path.exists(p)] + ([] if parts else ["手机版分册"])
+    if parts and not os.path.exists(pzip):
+        missing.append(os.path.basename(pzip) if pzip else "分册 zip")
     if missing:
         raise SystemExit("缺少文件，请先生成：" + "、".join(os.path.basename(m) for m in missing))
     # 分册要连续、最后一册收到最后一楼，否则多半是混进了别的分法生成的旧文件
@@ -86,6 +93,11 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
     # 前面几册的内容不随新回复变化，只要求完整包、全本和最后一册是新的。
     # 全量复查（--refresh）改了旧楼层时，前面几册也会过时，需要整套重新生成。
     stale = [p for p in [full_zip, book, parts[-1]] if os.path.getmtime(p) < newest_data]
+    # 分册 zip 必须正好是当前这些分册（只重新生成某几册后会重新打包；这里再核对一遍文件名和大小）
+    with zipfile.ZipFile(pzip) as z:
+        in_zip = {os.path.basename(i.filename): i.file_size for i in z.infolist()}
+    if in_zip != {os.path.basename(p): os.path.getsize(p) for p in parts}:
+        raise SystemExit(f"{os.path.basename(pzip)} 和分册文件对不上，请重新运行 epub --per-book {per_book}")
     if stale:
         raise SystemExit("这些文件比最新数据旧，请重新生成后再整理：" + "、".join(os.path.basename(p) for p in stale))
 
@@ -101,6 +113,7 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
     part_dir = os.path.join(out, f"手机版-分{len(parts)}册")
     for p in parts:
         place(p, part_dir)
+    place(pzip, part_dir + "-打包")
 
     sizes = [os.path.getsize(p) for p in parts]
     update_note = ""
@@ -111,7 +124,7 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
         f.write(GUIDE.format(title=title, version=version, last_time=release["last_time"], floors=floors,
                              full_size=mb(os.path.getsize(full_zip)), update_note=update_note,
                              book_size=mb(os.path.getsize(book)), n_parts=len(parts),
-                             part_range=f"{mb(min(sizes))}～{mb(max(sizes))}"))
+                             part_range=f"{mb(min(sizes))}～{mb(max(sizes))}", parts_zip_size=mb(os.path.getsize(pzip))))
 
     # 更早的上传文件夹只是硬链接，留着会把已被替换的旧版全本、旧分册一直占在磁盘上
     for d in os.listdir(os.path.dirname(out)):
