@@ -3,7 +3,7 @@
 目录：
   data/<帖子>/share_media/   压缩后的素材缓存（GIF→MP4、大图缩小），只转换新增的
   data/<帖子>/releases/      每次发布的文件清单（用来算更新包里该放哪些文件）
-  dist/douban-<帖子>/        分享包文件夹（就是朋友解压后看到的样子）
+  dist/douban-<帖子>-<版本>/ 分享包文件夹（压缩包里固定叫 douban-<帖子>/，就是朋友解压后看到的样子）
   dist/*.zip                 完整包、更新包
 """
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -145,8 +146,27 @@ def manifest_of(pkg: str):
     return out
 
 
-def write_zip(zip_path: str, pkg: str, rel_paths, log):
-    top = os.path.basename(pkg)
+def adopt_dir(dist_dir: str, prefix: str, version: str, log=print) -> str:
+    """输出文件夹名带上版本时间：<prefix>-<版本>。把上一次的同类文件夹改名过来接着用
+    （素材只补新增的、只重新生成变化的分册），所以 dist 里每类只保留最新的一份。"""
+    target = os.path.join(dist_dir, f"{prefix}-{version}")
+    os.makedirs(dist_dir, exist_ok=True)
+    old = [d for d in os.listdir(dist_dir) if os.path.isdir(os.path.join(dist_dir, d))
+           and (d == prefix or re.fullmatch(re.escape(prefix) + r"-\d{8}-\d{4}", d))]
+    old = [d for d in old if d != os.path.basename(target)]
+    if old and not os.path.exists(target):
+        newest = max(old, key=lambda d: os.path.getmtime(os.path.join(dist_dir, d)))
+        os.rename(os.path.join(dist_dir, newest), target)
+        log(f"  {newest}/ → {os.path.basename(target)}/")
+        old.remove(newest)
+    for d in old:
+        log(f"  注意：{d}/ 是更早的旧文件夹，确认不用后可以删掉")
+    os.makedirs(target, exist_ok=True)
+    return target
+
+
+def write_zip(zip_path: str, pkg: str, rel_paths, log, top: str):
+    """top 是朋友解压后看到的文件夹名，固定不带版本，更新包才能覆盖到同一个文件夹里。"""
     tmp = zip_path + ".tmp"
     with zipfile.ZipFile(tmp, "w") as z:
         for rel in sorted(rel_paths):
@@ -160,7 +180,9 @@ def write_zip(zip_path: str, pkg: str, rel_paths, log):
 def build(store: TopicStore, dist_dir: str = "dist", make_zip: bool = True, log=print):
     media, media_dir = prepare_media(store, log)
 
-    pkg = os.path.join(dist_dir, f"douban-{store.topic_id}")
+    version = time.strftime("%Y%m%d-%H%M")
+    top = f"douban-{store.topic_id}"
+    pkg = adopt_dir(dist_dir, top, version, log)
     pkg_media = os.path.join(pkg, "media")
     os.makedirs(pkg_media, exist_ok=True)
     for f in os.listdir(pkg):  # 分卷会重新生成
@@ -191,7 +213,6 @@ def build(store: TopicStore, dist_dir: str = "dist", make_zip: bool = True, log=
                  avatar_prefix="media/avatars/", share=True)
     r.run(log)
 
-    version = time.strftime("%Y%m%d-%H%M")
     last_time = r.replies[-1]["pubtime"] if r.replies else "-"
     with open(os.path.join(pkg, "README.txt"), "w", encoding="utf-8") as f:
         f.write(README.format(title=r.topic.get("title", ""), last_time=last_time,
@@ -208,13 +229,13 @@ def build(store: TopicStore, dist_dir: str = "dist", make_zip: bool = True, log=
     cur = manifest_of(pkg)
 
     log("打包：")
-    write_zip(os.path.join(dist_dir, f"douban-{store.topic_id}-full-{version}.zip"), pkg, cur.keys(), log)
+    write_zip(os.path.join(dist_dir, f"douban-{store.topic_id}-full-{version}.zip"), pkg, cur.keys(), log, top)
     if prev:
         changed = [p for p, h in cur.items() if prev.get(p) != h]
         if changed:
             since = (store.read_json(latest_path, {}) or {}).get("version", "?")
             write_zip(os.path.join(dist_dir, f"douban-{store.topic_id}-update-{since}-to-{version}.zip"),
-                      pkg, changed, log)
+                      pkg, changed, log, top)
         else:
             log("  和上次发布相比没有变化，不生成更新包")
 

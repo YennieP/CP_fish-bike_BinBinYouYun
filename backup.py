@@ -67,7 +67,7 @@ def main():
     sh.add_argument("--dist", default="dist", help="输出目录（默认 dist）")
     ep = sub.add_parser("epub", help="生成手机版 EPUB（每 500 楼一册，动图用缩小的 GIF）")
     ep.add_argument("--volumes", type=int, nargs="+", help="只生成这几册（从 1 开始），默认全部")
-    ep.add_argument("--dist", default="dist/epub", help="输出目录（默认 dist/epub）")
+    ep.add_argument("--dist", default="dist", help="输出到这里的 epub-<版本>/（默认 dist）")
     ep.add_argument("--full", action="store_true", help="整楼合成一本（文件很大，先在手机上试能否打开）")
     ep.add_argument("--per-book", type=int, default=500, help="每册多少楼（500 的倍数，默认 500）")
     sub.add_parser("bundle", help="整理上传网盘用的文件夹（硬链接，不额外占空间）")

@@ -5,8 +5,8 @@
   dist/upload/<帖子标题>-离线备份-<版本>/
     00-先看我-下载说明.txt
     电脑版/          douban-<帖子>-full-<版本>.zip（有更新包时一并放入）
-    手机版-全本/      douban-<帖子>-全本.epub          （来自 dist/epub/全本/）
-    手机版-分N册/     douban-<帖子>-01（1-2500楼）.epub ……（来自 dist/epub/分册-每N楼/）
+    手机版-全本/      douban-<帖子>-全本.epub          （来自 dist/epub-<版本>/全本/）
+    手机版-分N册/     douban-<帖子>-01（1-2500楼）.epub ……（来自 dist/epub-<版本>/分册-每N楼/）
 """
 from __future__ import annotations
 
@@ -60,12 +60,14 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
     version = release["version"]
     full_zip = os.path.join(dist_dir, f"douban-{tid}-full-{version}.zip")
     update_zips = sorted(f for f in os.listdir(dist_dir) if f.startswith(f"douban-{tid}-update-") and f.endswith(f"-to-{version}.zip"))
-    epub_dir = os.path.join(dist_dir, "epub")
+    epub_dir = os.path.join(dist_dir, f"epub-{version}")
+    if not os.path.isdir(epub_dir):
+        raise SystemExit(f"找不到 {epub_dir}：手机版要在本次 share 之后重新生成（epub --full 和 epub --per-book 2500）")
     book = os.path.join(epub.book_dir(epub_dir), f"douban-{tid}-全本.epub")
     part_dirs = sorted(d for d in (os.listdir(epub_dir) if os.path.isdir(epub_dir) else [])
                        if re.fullmatch(r"分册-每\d+楼", d))
     if len(part_dirs) > 1:
-        raise SystemExit(f"dist/epub 里有多种分册（{'、'.join(part_dirs)}），请删掉不用的那种再整理")
+        raise SystemExit(f"{epub_dir} 里有多种分册（{'、'.join(part_dirs)}），请删掉不用的那种再整理")
     src_dir = os.path.join(epub_dir, part_dirs[0]) if part_dirs else ""
     parts = sorted(os.path.join(src_dir, f) for f in (os.listdir(src_dir) if src_dir else [])
                    if re.fullmatch(rf"douban-{tid}-\d\d（\d+-\d+楼）\.epub", f))
@@ -77,7 +79,7 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
     spans = [tuple(map(int, re.search(r"（(\d+)-(\d+)楼）", p).groups())) for p in parts]
     floors = release["floors"]
     if spans[0][0] != 1 or spans[-1][1] != floors or any(a[1] + 1 != b[0] for a, b in zip(spans, spans[1:])):
-        raise SystemExit(f"dist/epub 里的分册不连续或没收到第 {floors} 楼，请重新运行 epub --per-book")
+        raise SystemExit(f"{epub_dir} 里的分册不连续或没收到第 {floors} 楼，请重新运行 epub --per-book")
 
     data_files = [store.replies_path, store.updates_path, store.topic_path]
     newest_data = max(os.path.getmtime(p) for p in data_files if os.path.exists(p))

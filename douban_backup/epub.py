@@ -5,7 +5,8 @@
 
 目录：
   data/<帖子>/epub_media/   缩小后的 GIF 缓存，只转换新增的（静态图直接用分享版的 share_media/）
-  dist/epub/                生成的 .epub
+  dist/epub-<版本>/          生成的 .epub：全本/、分册-每N楼/ 和分册的 zip。
+                            版本跟分享版一致（最近一次 share 的时间），这样同一次更新的电脑版和手机版对得上
 """
 from __future__ import annotations
 
@@ -24,7 +25,7 @@ from lxml import html as lhtml
 from .avatars import avatars_dir
 from .crawl_images import done_map
 from .render import FLOORS_PER_FILE, Renderer
-from .share import ffmpeg_exe, prepare_media
+from .share import adopt_dir, ffmpeg_exe, prepare_media
 from .store import TopicStore
 
 FLOORS_PER_CHAPTER = 50
@@ -354,11 +355,24 @@ def zip_parts(store: TopicStore, dist_dir: str, per_book: int, log=print) -> str
     return out
 
 
-def build(store: TopicStore, dist_dir: str = "dist/epub", volumes=None, full=False,
+def release_version(store: TopicStore, log=print) -> str:
+    """手机版沿用最近一次分享版的版本号；数据比分享版新时提醒先运行 share。"""
+    rel = store.read_json(os.path.join(store.root, "releases", "latest.json")) or {}
+    if not rel:
+        log("  还没有分享版，版本号用当前时间")
+        return time.strftime("%Y%m%d-%H%M")
+    if rel.get("floors") != len(store.replies()):
+        log(f"  ⚠️ 数据比分享版 {rel['version']} 新（{rel.get('floors')} → {len(store.replies())} 楼），"
+            "建议先运行 share，手机版会跟着用新的版本号")
+    return rel["version"]
+
+
+def build(store: TopicStore, dist_dir: str = "dist", volumes=None, full=False,
           per_book: int = FLOORS_PER_FILE, log=print):
-    """全本放在 全本/；分册放在 分册-每N楼/，并打一个 zip。
+    """输出到 dist/epub-<版本>/：全本放在 全本/；分册放在 分册-每N楼/，并打一个 zip。
     per_book 按楼数固定分册（须是 500 的倍数）：楼增高后只有最后一册变化，满了再新开一册。"""
     n = len(store.replies())
+    dist_dir = adopt_dir(dist_dir, "epub", release_version(store, log), log)
     if full:
         log(f"生成手机版 EPUB：全本 1 册，共 {n} 楼")
         return [build_volume(store, 0, book_dir(dist_dir), per_book=n, log=log)]
