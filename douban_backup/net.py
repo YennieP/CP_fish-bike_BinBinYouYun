@@ -67,7 +67,7 @@ class Client:
         for backoff in (15, 45, None):
             try:
                 return self.session.get(url, allow_redirects=False, **kw)
-            except (requests.ConnectionError, requests.Timeout) as e:
+            except (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError) as e:
                 if backoff is None:
                     raise
                 print(f"    （网络错误 {type(e).__name__}，{backoff} 秒后重试）", flush=True)
