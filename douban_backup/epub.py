@@ -350,15 +350,22 @@ def parts_zip(store: TopicStore, dist_dir: str, per_book: int) -> str:
     return os.path.join(dist_dir, f"douban-{store.topic_id}-手机版-分册-每{per_book}楼.zip")
 
 
+def part_name(fname: str) -> str:
+    """给朋友看的分册文件名：douban-500345559-06（12501-13378楼）.epub → 第6册（12501-13378楼）.epub"""
+    m = re.fullmatch(r"douban-\d+-(\d\d)（(\d+-\d+楼)）\.epub", fname)
+    return f"第{int(m.group(1))}册（{m.group(2)}）.epub" if m else fname
+
+
 def zip_parts(store: TopicStore, dist_dir: str, per_book: int, log=print) -> str:
-    """把分册文件夹打成一个 zip，方便一次下载全部分册。EPUB 本身已压缩，直接存。"""
+    """把分册文件夹打成一个 zip，方便一次下载全部分册。EPUB 本身已压缩，直接存。
+    zip 里用简短的文件名（第N册），解压后是一个“手机版-分N册”文件夹。"""
     src = parts_dir(dist_dir, per_book)
     out = parts_zip(store, dist_dir, per_book)
     tmp = out + ".tmp"
+    files = sorted(f for f in os.listdir(src) if f.endswith(".epub"))
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as z:
-        for f in sorted(os.listdir(src)):
-            if f.endswith(".epub"):
-                z.write(os.path.join(src, f), f"{os.path.basename(src)}/{f}")
+        for f in files:
+            z.write(os.path.join(src, f), f"手机版-分{len(files)}册/{part_name(f)}")
     os.replace(tmp, out)
     log(f"  打包 {os.path.basename(out)}：{os.path.getsize(out) / 1024 / 1024:.0f} MB")
     return out

@@ -8,9 +8,9 @@
     手机版-全本.epub
     手机版-分N册.zip      全部分册打成一个包（解压后是 N 个 EPUB）
 
-文件名可以在 data/<帖子>/bundle.json 里改（不进 Git），可用 {title} {date} {version} {prev} {n} 占位，例如：
-  {"folder": "鱼车の天后豆瓣楼-{date}", "computer_full": "鱼车天后楼电脑版-full-{version}.zip",
-   "computer_update": "鱼车天后楼电脑版-update-{prev}-to-{version}.zip"}
+文件名尽量简单，版本信息写在下载说明里。名字可以在 data/<帖子>/bundle.json 里改（不进 Git），
+可用 {title} {date} {version} {prev} {n} 占位，例如：
+  {"folder": "鱼车の天后豆瓣楼-{date}"}
 """
 from __future__ import annotations
 
@@ -24,8 +24,8 @@ from .store import TopicStore
 
 NAMES = {
     "folder": "{title}-离线备份-{version}",
-    "computer_full": "douban-{tid}-full-{version}.zip",
-    "computer_update": "douban-{tid}-update-{prev}-to-{version}.zip",
+    "computer_full": "电脑版-完整包.zip",
+    "computer_update": "电脑版-更新包.zip",
     "book": "手机版-全本.epub",
     "parts_zip": "手机版-分{n}册.zip",
 }
@@ -62,6 +62,7 @@ GUIDE = """\
   {parts_name}（{parts_zip_size}）：分成 {n_parts} 本，打成了一个压缩包
     · 每 {per_book} 楼一本（{part_list}），每本 {part_range}。
     · 文件小，跳转快；引用到别的册子的楼层只显示楼层号，点不过去。
+    · 解压后是{parts_files}。
     · 以后更新时，要重新下载这个压缩包，但前面的册子内容不会变，只需要把最后一两本重新导入阅读器。{changed_note}
 
 怎么打开（以 iPhone 为例；网盘 App 的按钮名称可能略有不同）：
@@ -146,7 +147,7 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
     # 分册 zip 必须正好是当前这些分册（只重新生成某几册后会重新打包；这里再核对一遍文件名和大小）
     with zipfile.ZipFile(pzip) as z:
         in_zip = {os.path.basename(i.filename): i.file_size for i in z.infolist()}
-    if in_zip != {os.path.basename(p): os.path.getsize(p) for p in parts}:
+    if in_zip != {epub.part_name(os.path.basename(p)): os.path.getsize(p) for p in parts}:
         raise SystemExit(f"{os.path.basename(pzip)} 和分册文件对不上，请重新运行 epub --per-book {per_book}")
     if stale:
         raise SystemExit("这些文件比最新数据旧，请重新生成后再整理：" + "、".join(os.path.basename(p) for p in stale))
@@ -166,29 +167,35 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
         prev = re.search(r"-update-(\d{8}-\d{4})-to-", u).group(1)
         u_name = nm["computer_update"].format(prev=prev, **fill)
         place(os.path.join(dist_dir, u), os.path.join(out, "电脑版"), u_name)
-        update_note = (f"\n更新：装过上一版（{prev}）的 Windows 用户，可以只下载 电脑版/ 里的更新包\n"
-                       f"   {u_name}（{mb(os.path.getsize(os.path.join(dist_dir, u)))}），只含有变化的文件。\n"
-                       "   详细步骤见电脑版文件夹里的“使用说明.txt”。Mac 用户、或者漏过版本的人，请重新下载完整包。\n")
+        update_note = (f"\n已经下载过上一版的：不用再下完整包，只下载 电脑版/ 里的 {u_name}"
+                       f"（{mb(os.path.getsize(os.path.join(dist_dir, u)))}）就行。\n"
+                       f"   · 怎么知道是不是上一版：打开你电脑上的“使用说明.txt”，最上面的版本号是 {prev} 就是。\n"
+                       "   · 更新包只适用于这一个版本。版本号对不上（中间漏过更新）、或者用的是 Mac，请重新下载完整包。\n"
+                       "   · 具体怎么解压覆盖，见“使用说明.txt”里的“怎么更新到新版本”。\n")
         # 按上一版的楼数算出这次变了哪几册（和 update 重新生成分册的规则一致）
         prev_floors = (store.read_json(os.path.join(store.root, "releases", f"{prev}.json")) or {}).get("floors")
         if prev_floors:
             first = max(1, -(-prev_floors // per_book))
             if first > 1:
-                changed_note = (f"\n      这次（相比 {prev}）变化的是第 {first}" + (f"–{len(parts)}" if len(parts) > first else "")
-                                + " 本，前面的不用重新导入。")
+                changed = "、".join(epub.part_name(os.path.basename(p)) for p in parts[first - 1:])
+                changed_note = f"\n      这次（相比 {prev}）变化的只有 {changed}，前面的不用重新导入。"
     book_name, parts_name = nm["book"].format(**fill), nm["parts_zip"].format(**fill)
     place(book, out, book_name)
     place(pzip, out, parts_name)
 
     sizes = [os.path.getsize(p) for p in parts]
-    part_list = "、".join(f"第 {i} 本 {a}–{b} 楼" for i, (a, b) in enumerate(spans, 1))
+    part_list = "、".join(f"第{i}册 {a}–{b} 楼" for i, (a, b) in enumerate(spans, 1))
     with open(os.path.join(out, "00-先看我-下载说明.txt"), "w", encoding="utf-8") as f:
         f.write(GUIDE.format(title=title, version=version, last_time=release["last_time"], floors=floors,
                              folder=f"douban-{tid}", full_name=full_name,
                              full_size=mb(os.path.getsize(full_zip)), update_note=update_note,
                              book_name=book_name, book_size=mb(os.path.getsize(book)),
                              parts_name=parts_name, n_parts=len(parts), per_book=per_book, part_list=part_list,
-                             changed_note=changed_note, part_range=f"{mb(min(sizes))}～{mb(max(sizes))}",
+                             changed_note=changed_note,
+                             parts_files=f"一个“手机版-分{len(parts)}册”文件夹，里面是 "
+                                         f"{epub.part_name(os.path.basename(parts[0]))} 到 "
+                                         f"{epub.part_name(os.path.basename(parts[-1]))}",
+                             part_range=f"{mb(min(sizes))}～{mb(max(sizes))}",
                              parts_zip_size=mb(os.path.getsize(pzip))))
 
     # 更早的上传文件夹只是硬链接，留着会把已被替换的旧版全本、旧分册一直占在磁盘上

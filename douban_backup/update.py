@@ -86,19 +86,19 @@ def run(store: TopicStore, refresh: bool = False, fetch: bool = True, per_book: 
 
     tid = store.topic_id
     upd = f"douban-{tid}-update-{prev_version}-to-{version}.zip"
+    nm = bundle.names(store)
     parts = sorted(f for f in os.listdir(epub.parts_dir(epub_dir, per_book)) if f.endswith(".epub"))
-    changed_parts = [p for p in parts if int(p.split(f"douban-{tid}-")[1][:2]) in vols]
+    changed_parts = [epub.part_name(p) for p in parts if int(p.split(f"douban-{tid}-")[1][:2]) in vols]
     log(f"\n✅ 新版本 {version}：{prev_floors} → {floors} 楼" + ("（含全量复查）" if refresh else ""))
     log(f"上传文件夹：{out}")
-    log("这次要告诉朋友的：")
+    log("这次要告诉朋友的（文件名和网盘里一致）：")
     if prev_version and os.path.exists(os.path.join(dist_dir, upd)):
-        log(f"  · 电脑版：已有旧版本的，只下载更新包 {upd}；新朋友下载完整包")
+        log(f"  · 电脑版：下载过 {prev_version} 版的，只下载 {nm['computer_update']}；其他人下载 {nm['computer_full']}")
     else:
-        log("  · 电脑版：下载完整包")
-    log("  · 手机版全本：重新下载整本")
+        log(f"  · 电脑版：下载 {nm['computer_full']}")
+    log(f"  · 手机版全本：重新下载 {nm['book']}")
     if len(changed_parts) == len(parts):
-        log(f"  · 手机版分册：全部 {len(parts)} 册都要重新下载")
+        log(f"  · 手机版分册：全部 {len(parts)} 册都要重新导入")
     else:
-        log(f"  · 手机版分册：只需重新下载 {'、'.join(changed_parts)}")
-    log(f"    （新朋友或想一次下完的，下载分册打包 {os.path.basename(epub.parts_zip(store, epub_dir, per_book))}）")
+        log(f"  · 手机版分册：下载 {nm['parts_zip'].format(n=len(parts))}，只需重新导入 {'、'.join(changed_parts)}")
     return out
