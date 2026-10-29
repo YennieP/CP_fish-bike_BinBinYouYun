@@ -39,7 +39,7 @@ GUIDE = """\
 
 按自己的设备挑一种下载就行，不用全下。看的时候都不需要联网，也不需要装软件。
 
-  在电脑上看 → 电脑版/ 里的 {full_name}（{full_size}）
+  在电脑上看 → 电脑版/ 里的 {full_name}（{full_size}）{update_hint}
   在手机上看 → {book_name}（{book_size}）或 {parts_name}（{parts_zip_size}），二选一
 
 
@@ -161,12 +161,14 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
         shutil.rmtree(out)  # 只含硬链接和说明，删掉不影响 dist 里的原文件
     full_name = nm["computer_full"].format(**fill)
     place(full_zip, os.path.join(out, "电脑版"), full_name)
-    update_note = changed_note = ""
+    update_note = changed_note = update_hint = ""
     if update_zips:
         u = update_zips[-1]
         prev = re.search(r"-update-(\d{8}-\d{4})-to-", u).group(1)
         u_name = nm["computer_update"].format(prev=prev, **fill)
         place(os.path.join(dist_dir, u), os.path.join(out, "电脑版"), u_name)
+        update_hint = (f"\n               已经下载过上一版（{prev}）的 Windows 用户，只下载 电脑版/ 里的 {u_name}"
+                       f"（{mb(os.path.getsize(os.path.join(dist_dir, u)))}）就行，见下面第一部分")
         update_note = (f"\n已经下载过上一版的：不用再下完整包，只下载 电脑版/ 里的 {u_name}"
                        f"（{mb(os.path.getsize(os.path.join(dist_dir, u)))}）就行。\n"
                        f"   · 怎么知道是不是上一版：打开你电脑上的“使用说明.txt”，最上面的版本号是 {prev} 就是。\n"
@@ -188,7 +190,7 @@ def build(store: TopicStore, dist_dir: str = "dist", log=print):
     with open(os.path.join(out, "00-先看我-下载说明.txt"), "w", encoding="utf-8") as f:
         f.write(GUIDE.format(title=title, version=version, last_time=release["last_time"], floors=floors,
                              folder=f"douban-{tid}", full_name=full_name,
-                             full_size=mb(os.path.getsize(full_zip)), update_note=update_note,
+                             full_size=mb(os.path.getsize(full_zip)), update_note=update_note, update_hint=update_hint,
                              book_name=book_name, book_size=mb(os.path.getsize(book)),
                              parts_name=parts_name, n_parts=len(parts), per_book=per_book, part_list=part_list,
                              changed_note=changed_note,
