@@ -49,6 +49,7 @@ a{color:#2f7a3a;text-decoration:none}
 .c img,.pic img{max-width:100%;max-height:60vh;height:auto;display:block}
 .pic{margin:.4em 0;clear:both}
 .pic.sticker img{max-width:9em;max-height:9em}
+.pic.sticker.still img{max-width:4.5em;max-height:4.5em}
 blockquote.q{margin:.4em 0;padding:.3em .6em;border-left:3px solid #ccc;background:#f3f1ec;color:#777;font-size:.88em;clear:both;page-break-inside:avoid;break-inside:avoid;-webkit-column-break-inside:avoid}
 blockquote.q img{max-width:9em;max-height:7em;display:block}
 blockquote.q .qav{width:1.1em;height:1.1em;vertical-align:middle;margin-right:.2em}
@@ -131,6 +132,14 @@ class EpubRenderer(Renderer):
 
     def volume_of(self, floor):
         return 0 if floor == 0 else (floor - 1) // self.per_book
+
+    def img(self, image, cls="pic"):
+        s = super().img(image, cls)
+        # 静态表情包在阅读器里显得太大，缩到动图表情的一半
+        name = (self.media.get((image or {}).get("pid")) or {}).get("img") or ""
+        if cls and image and image.get("kind") == "sticker" and name and not name.endswith(".gif"):
+            s = s.replace('class="pic sticker"', 'class="pic sticker still"', 1)
+        return s
 
     def render_reply(self, r, floor, current_file):
         s = super().render_reply(r, floor, current_file)
