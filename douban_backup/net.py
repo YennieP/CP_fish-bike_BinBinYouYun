@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import random
 import re
+import sys
 import time
 
 import requests
@@ -95,12 +96,46 @@ class Client:
         raise Blocked(f"页面里找不到帖子内容（标题“{title}”）{hint}")
 
     def get_image(self, url: str):
-        """返回 (status_code, bytes)。3xx 跳到风控域名时抛 Blocked。"""
+        """返回 (status_code, bytes)。3xx 跳到风控域名时抛 Blocked。
+        边下边读：一张图超过几秒还没下完时，显示已下载多少，免得看起来像卡住了。"""
         self._wait(self.image_delay)
-        resp = self._get(url, timeout=60)
-        if resp.status_code in (301, 302, 303, 307, 308):
-            loc = resp.headers.get("Location", "")
-            if any(h in loc for h in BLOCK_LOCATION_HINTS):
-                raise Blocked(f"图片请求被重定向到 {loc}")
-            return resp.status_code, b""
-        return resp.status_code, resp.content
+        for backoff in (15, 45, None):  # 和 _get 一样，只对网络层错误重试；读正文中途断开也算
+            try:
+                resp = self.session.get(url, allow_redirects=False, timeout=60, stream=True)
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    loc = resp.headers.get("Location", "")
+                    resp.close()
+                    if any(h in loc for h in BLOCK_LOCATION_HINTS):
+                        raise Blocked(f"图片请求被重定向到 {loc}")
+                    return resp.status_code, b""
+                return resp.status_code, read_with_progress(resp, url.rsplit("/", 1)[-1])
+            except (requests.ConnectionError, requests.Timeout, requests.exceptions.ChunkedEncodingError) as e:
+                if backoff is None:
+                    raise
+                print(f"    （网络错误 {type(e).__name__}，{backoff} 秒后重试）", flush=True)
+                time.sleep(backoff)
+
+
+PROGRESS_AFTER = 5  # 下载超过几秒才开始显示进度
+
+
+def read_with_progress(resp, name: str) -> bytes:
+    total = int(resp.headers.get("Content-Length") or 0)
+    tty = sys.stdout.isatty()
+    every = 1 if tty else 15  # 终端里原地刷新；写进日志时少打几行
+    start = time.time()
+    last = 0.0  # 第一次在 PROGRESS_AFTER 秒时就显示
+    shown = False
+    buf = bytearray()
+    for chunk in resp.iter_content(64 * 1024):
+        buf += chunk
+        now = time.time()
+        if now - start >= PROGRESS_AFTER and now - last >= every:
+            last = now
+            done = f"{len(buf) / 1024 / 1024:.1f}" + (f"/{total / 1024 / 1024:.1f}" if total else "")
+            line = f"    {name} 下载中：已下载 {done} MB（{len(buf) / 1024 / (now - start):.0f} KB/s）"
+            print("\r" + line + "   " if tty else line, end="" if tty else "\n", flush=True)
+            shown = True
+    if shown and tty:
+        print(flush=True)  # 换行，后面的“[n/N] 文件名 大小”另起一行
+    return bytes(buf)
